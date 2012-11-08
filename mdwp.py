@@ -7,6 +7,7 @@ import sys
 import os
 import re
 import codecs
+import getpass
 import xmlrpclib
 import argparse
 import yaml
@@ -192,15 +193,16 @@ if __name__ == '__main__':
         if 'password' in y.keys():
             password = y['password']
         else:
-            password = raw_input('password: ')
+            password = getpass.getpass('password: ')
     else:
         blogurl = raw_input('blogurl: ')
         username = raw_input('username: ')
-        password = raw_input('password: ')
+        password = getpass.getpass('password: ')
 
-    xr = XmlRpc(blogurl, username, password)
-
-    parser = argparse.ArgumentParser(description='Process some options.')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--url')
+    parser.add_argument('--username')
+    parser.add_argument('--password')
     subparsers = parser.add_subparsers()
 
     parser_post = subparsers.add_parser('post')
@@ -224,8 +226,31 @@ if __name__ == '__main__':
     parser_list.add_argument('-n', '--number')
     parser_list.add_argument('-d', '--description', action='store_true')
     parser_list.add_argument('-c', '--categories', action='store_true')
-    parser_list.add_argument('-a', '--tags', action='store_true')
+    parser_list.add_argument('-k', '--tags', action='store_true')
     parser_list.set_defaults(func=getList)
 
     args = parser.parse_args()
-    print(args.func(xr, vars(args)))
+    arg_dict = vars(args)
+
+    ask_pass = False
+    ask_user = False
+    if arg_dict['url']:
+        blogurl = arg_dict['url']
+        ask_pass = True
+        ask_user = True
+    if arg_dict['username']:
+        username = arg_dict['username']
+        ask_user = False
+        ask_pass = True
+    if arg_dict['password']:
+        password = arg_dict['password']
+        ask_pass = False
+    if ask_user:
+        username = raw_input('username: ')
+    if ask_pass:
+        password = getpass.getpass('password: ')
+
+    xr = XmlRpc(blogurl, username, password)
+    result = args.func(xr, arg_dict)
+
+    print(result)
