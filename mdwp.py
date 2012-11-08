@@ -1,11 +1,14 @@
 #! /usr/bin/python
 # -*- coding:utf-8 -*-
 
+from __future__ import print_function
+
 import sys
 import os
 import re
 import codecs
 import xmlrpclib
+import argparse
 import yaml
 import markdown
 
@@ -52,7 +55,7 @@ def buildContent(data):
                    re.M | re.S)
     match_obj = r.match(data)
     y = yaml.load(match_obj.groupdict().get('yaml'))
-    
+
     text = match_obj.groupdict().get('content')
     text = gfmToFenced(text)
     text = markdown.markdown(text, extensions=['footnotes', 'codehilite',
@@ -75,6 +78,7 @@ def buildContent(data):
 def gfmToFenced(text):
     re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
                         re.M | re.S)
+
     def repFunc(match_obj):
         lang = match_obj.groupdict().get('lang')
         body = match_obj.groupdict().get('body')
@@ -93,39 +97,85 @@ def gfmToFenced(text):
     return text
 
 
-def post(blogurl, username, password, data):
+def newPost(xr, args):
+    data = codecs.open(args['file'], 'r', 'utf-8').read()
     content = buildContent(data)
     publish = content.pop('publish')
+    postid = xr.newPost(content, publish)
 
-    xr = XmlRpc(blogurl, username, password)
-    result = xr.newPost(content, publish)
-    
-    return result
+    if args['rename']:
+        rename(postid, content['title'].replace(' ', '-'), args['file'])
+
+    return postid
 
 
-def edit(blogurl, username, password, postid, data):
+def editPost(xr, args):
+    postid = int(args['postid'])
+    data = codecs.open(args['file'], 'r', 'utf-8').read()
     content = buildContent(data)
     publish = content.pop('publish')
-    
-    xr = XmlRpc(blogurl, username, password)
     result = xr.editPost(postid, content, publish)
-    
+
+    if args['rename']:
+        rename(postid, content['title'].replace(' ', '-'), args['file'])
+
     return result
 
 
-def delete(blogurl, username, password, postid):
-    xr = XmlRpc(blogurl, username, password)
+def deletePost(xr, args):
+    postid = int(args['postid'])
+
+    if args['force'] == False:
+        yn = raw_input("remove postid: %d? " % postid)
+        if not (yn == 'y' or yn == 'yes'):
+            return 'cancel'
+
     result = xr.deletePost(postid)
-    
+
     return result
+
+
+def getList(xr, args):
+    num = args['number'] if args['number'] else None
+    posts = xr.getRecentPosts(num)
+
+    options = []
+    c, t, d = False, False, False
+    if args['categories']:
+        c = True
+    if args['tags']:
+        t = True
+    if args['description']:
+        d = True
+
+    results = []
+    for p in posts:
+        ss = ["%s: %s" % (p['postid'], p['title'])]
+        if c:
+            ss.append("  categories: %s" % ', '.join(p['categories']))
+        if t:
+            ss.append("  tags: %s" % p['mt_keywords'])
+        if d:
+            ss.append("  %s" % p['descriptions'])
+        results.append('\n'.join(ss))
+    result = '\n'.join(results)
+
+    return result
+
+
+def rename(postid, title, file):
+    filename = "%s_%s" % (postid, title)
+    ext = os.path.splitext(file)[1]
+    path = os.path.dirname(file)
+    if path:
+        dst = "%s/%s%s" % (path, filename, ext)
+    else:
+        dst = filename
+
+    os.rename(file, dst)
 
 
 if __name__ == '__main__':
-    if sys.argv[1] in ('post', 'edit', 'delete', 'list'):
-        mode = sys.argv[1]
-    else:
-        sys.exit('invalid option')
-
     config_path = '%s/.mdwpconfig' % os.environ['HOME']
 
     if os.path.exists(config_path):
@@ -148,15 +198,38 @@ if __name__ == '__main__':
         username = raw_input('username: ')
         password = raw_input('password: ')
 
-    if mode == 'post':
-        data = codecs.open(sys.argv[2], 'r', 'utf-8').read()
-        result = post(blogurl, username, password, data)
-    elif mode == 'edit':
-        postid = int(sys.argv[2])
-        data = codecs.open(sys.argv[3], 'r', 'utf-8').read()
-        result = edit(blogurl, username, password, postid, data)
-    elif mode == 'delete':
-        postid = int(sys.argv[2])
-        result = delete(blogurl, username, password, postid)
+    xr = XmlRpc(blogurl, username, password)
+    postFunc = lambda a: print(newPost(xr, a))
+    editFunc = lambda a: print(editPost(xr, a))
+    delFunc = lambda a: print(deletePost(xr, a))
+    listFunc = lambda a: print(getList(xr, a))
 
-    print result
+    parser = argparse.ArgumentParser(description='Process some options.')
+    subparsers = parser.add_subparsers()
+
+    parser_post = subparsers.add_parser('post')
+    parser_post.add_argument('file')
+    parser_post.add_argument('-r', '--rename', action='store_true')
+    parser_post.set_defaults(func=newPost)
+
+    parser_edit = subparsers.add_parser('edit')
+    parser_edit.add_argument('postid')
+    parser_edit.add_argument('file')
+    parser_edit.add_argument('-r', '--rename', action='store_true')
+    parser_edit.add_argument('-f', '--force', action='store_true')
+    parser_edit.set_defaults(func=editPost)
+
+    parser_del = subparsers.add_parser('delete')
+    parser_del.add_argument('postid')
+    parser_del.add_argument('-f', '--force', action='store_true')
+    parser_del.set_defaults(func=deletePost)
+
+    parser_list = subparsers.add_parser('list')
+    parser_list.add_argument('-n', '--number')
+    parser_list.add_argument('-d', '--description', action='store_true')
+    parser_list.add_argument('-c', '--categories', action='store_true')
+    parser_list.add_argument('-a', '--tags', action='store_true')
+    parser_list.set_defaults(func=getList)
+
+    args = parser.parse_args()
+    print(args.func(xr, vars(args)))
