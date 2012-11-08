@@ -81,16 +81,14 @@ def gfmToFenced(text):
 
         if lang:
             return ("~~~~.%s\n"
-                    "%s\n"
+                    "%s"
                     "~~~~") % (lang, body)
         else:
-            return "~~~~\n%s\n~~~~" % body
+            return ("~~~~\n"
+                    "%s"
+                    "~~~~") % body
 
-    while(1):
-        if re_gfm.search(text):
-            text = re_gfm.sub(repFunc, text)
-        else:
-            break
+    text = re_gfm.sub(repFunc, text)
 
     return text
 
