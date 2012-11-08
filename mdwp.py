@@ -47,19 +47,16 @@ class XmlRpc(object):
                                                  publish)
 
 
-def post(blogurl, username, password, data):
+def buildContent(data):
     r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
                    re.M | re.S)
     match_obj = r.match(data)
     y = yaml.load(match_obj.groupdict().get('yaml'))
-
-    if y['status'] == 'publish':
-        publish = True
-    else:
-        publish = False
-
-    text = markdown.markdown(match_obj.groupdict().get('content'),
-                             extensions=['footnotes', 'codehilite'])
+    
+    text = match_obj.groupdict().get('content')
+    text = gfmToFenced(text)
+    text = markdown.markdown(text, extensions=['footnotes', 'codehilite',
+                                               'fenced_code'])
 
     content = {}
     content['title'] = y['title']
@@ -67,39 +64,61 @@ def post(blogurl, username, password, data):
     content['categories'] = [y['categories']]
     content['mt_keywords'] = y['tags']
 
+    if y['status'] == 'publish':
+        content['publish'] = True
+    else:
+        content['publish'] = False
+
+    return content
+
+
+def gfmToFenced(text):
+    re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
+                        re.M | re.S)
+    def repFunc(match_obj):
+        lang = match_obj.groupdict().get('lang')
+        body = match_obj.groupdict().get('body')
+
+        if lang:
+            return ("~~~~.%s\n"
+                    "%s\n"
+                    "~~~~") % (lang, body)
+        else:
+            return "~~~~\n%s\n~~~~" % body
+
+    while(1):
+        if re_gfm.search(text):
+            text = re_gfm.sub(repFunc, text)
+        else:
+            break
+
+    return text
+
+
+def post(blogurl, username, password, data):
+    content = buildContent(data)
+    publish = content.pop('publish')
+
     xr = XmlRpc(blogurl, username, password)
     result = xr.newPost(content, publish)
+    
     return result
 
 
 def edit(blogurl, username, password, postid, data):
-    r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
-                   re.M | re.S)
-    match_obj = r.match(data)
-    y = yaml.load(match_obj.groupdict().get('yaml'))
-
-    if y['status'] == 'publish':
-        publish = True
-    else:
-        publish = False
-
-    text = markdown.markdown(match_obj.groupdict().get('content'),
-                             extensions=['footnotes', 'codehilite'])
-
-    content = {}
-    content['title'] = y['title']
-    content['description'] = text
-    content['categories'] = [y['categories']]
-    content['mt_keywords'] = y['tags']
+    content = buildContent(data)
+    publish = content.pop('publish')
     
     xr = XmlRpc(blogurl, username, password)
     result = xr.editPost(postid, content, publish)
+    
     return result
 
 
 def delete(blogurl, username, password, postid):
     xr = XmlRpc(blogurl, username, password)
     result = xr.deletePost(postid)
+    
     return result
 
 
@@ -132,14 +151,14 @@ if __name__ == '__main__':
         password = raw_input('password: ')
 
     if mode == 'post':
-        data = codecs.open(sys.argv[2], 'r', 'utf-8').read().encode('utf-8')
+        data = codecs.open(sys.argv[2], 'r', 'utf-8').read()
         result = post(blogurl, username, password, data)
     elif mode == 'edit':
-        postid = sys.argv[2]
-        data = codecs.open(sys.argv[3], 'r', 'utf-8').read().encode('utf-8')
+        postid = int(sys.argv[2])
+        data = codecs.open(sys.argv[3], 'r', 'utf-8').read()
         result = edit(blogurl, username, password, postid, data)
     elif mode == 'delete':
-        postid = sys.argv[2]
+        postid = int(sys.argv[2])
         result = delete(blogurl, username, password, postid)
 
     print result
