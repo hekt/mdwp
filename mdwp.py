@@ -177,28 +177,7 @@ def rename(postid, title, file):
 
 
 if __name__ == '__main__':
-    config_path = '%s/.mdwpconfig' % os.environ['HOME']
-
-    if os.path.exists(config_path):
-        config = codecs.open(config_path, 'r', 'utf-8').read()
-        y = yaml.load(config)
-        if 'blogurl' in y.keys():
-            blogurl = y['blogurl']
-        else:
-            blogurl = raw_input('blogurl: ')
-        if 'username' in y.keys():
-            username = y['username']
-        else:
-            username = raw_input('username: ')
-        if 'password' in y.keys():
-            password = y['password']
-        else:
-            password = getpass.getpass('password: ')
-    else:
-        blogurl = raw_input('blogurl: ')
-        username = raw_input('username: ')
-        password = getpass.getpass('password: ')
-
+    # argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--url')
     parser.add_argument('--username')
@@ -232,24 +211,23 @@ if __name__ == '__main__':
     args = parser.parse_args()
     arg_dict = vars(args)
 
-    ask_pass = False
-    ask_user = False
+    # blog info
     if arg_dict['url']:
         blogurl = arg_dict['url']
-        ask_pass = True
-        ask_user = True
+    else:
+        blogurl = raw_input('blogurl: ')
+    blogurl = '%sxmlrpc.php' % blogurl
+        
     if arg_dict['username']:
         username = arg_dict['username']
-        ask_user = False
-        ask_pass = True
+    else:
+        username = raw_input('username: ')
     if arg_dict['password']:
         password = arg_dict['password']
-        ask_pass = False
-    if ask_user:
-        username = raw_input('username: ')
-    if ask_pass:
+    else:
         password = getpass.getpass('password: ')
 
+    # build
     xr = XmlRpc(blogurl, username, password)
     result = args.func(xr, arg_dict)
 
