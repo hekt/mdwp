@@ -199,10 +199,6 @@ if __name__ == '__main__':
         password = raw_input('password: ')
 
     xr = XmlRpc(blogurl, username, password)
-    postFunc = lambda a: print(newPost(xr, a))
-    editFunc = lambda a: print(editPost(xr, a))
-    delFunc = lambda a: print(deletePost(xr, a))
-    listFunc = lambda a: print(getList(xr, a))
 
     parser = argparse.ArgumentParser(description='Process some options.')
     subparsers = parser.add_subparsers()
