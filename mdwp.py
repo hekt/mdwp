@@ -143,7 +143,7 @@ def newPost(args):
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
     if postid == True:
-        message = "Post the article as postid: %d." % postid
+        message = "the article was posted as postid: %d." % postid
     else:
         message = "failure"
 
