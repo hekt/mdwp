@@ -14,6 +14,12 @@ import yaml
 import markdown
 
 
+global CONF_FILE, CONF_FILENAME, CONF_DIRECTORY
+CONF_FILENAME = '.mdwpconfig'
+CONF_DIRECTORY = os.environ['HOME']
+CONF_FILE = "%s/%s" % (CONF_DIRECTORY, CONF_FILENAME)
+
+
 class XmlRpc(object):
     def __init__(self, blogurl, username, password, blogid='', appkey=''):
         self.server = xmlrpclib.ServerProxy(blogurl, allow_none=True)
@@ -76,6 +82,34 @@ def buildContent(data):
     return content
 
 
+def buildXmlRpc(args):
+    loaded_conf = loadConfig(CONF_FILE)
+
+    if arg_dict['blogurl']:
+        blogurl = args['blogurl']
+    elif 'blogurl' in loaded_conf.keys():
+        blogurl = loaded_conf['blogurl']
+    else:
+        blogurl = raw_input('blogurl: ')
+    blogurl = '%sxmlrpc.php' % blogurl
+
+    if arg_dict['username']:
+        username = args['username']
+    elif 'username' in loaded_conf.keys():
+        username = loaded_conf['username']
+    else:
+        username = raw_input('username: ')
+
+    if arg_dict['password']:
+        password = args['password']
+    elif 'password' in loaded_conf.keys():
+        password = loaded_conf['password']
+    else:
+        password = getpass.getpass('password: ')
+
+    return XmlRpc(blogurl, username, password)
+
+
 def gfmToFenced(text):
     re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
                         re.M | re.S)
@@ -98,7 +132,8 @@ def gfmToFenced(text):
     return text
 
 
-def newPost(xr, args):
+def newPost(args):
+    xr = buildXmlRpc(args)
     data = codecs.open(args['file'], 'r', 'utf-8').read()
     content = buildContent(data)
     publish = content.pop('publish')
@@ -110,7 +145,8 @@ def newPost(xr, args):
     return postid
 
 
-def editPost(xr, args):
+def editPost(args):
+    xr = buildXmlRpc(args)
     postid = int(args['postid'])
     data = codecs.open(args['file'], 'r', 'utf-8').read()
     content = buildContent(data)
@@ -123,10 +159,11 @@ def editPost(xr, args):
     return result
 
 
-def deletePost(xr, args):
+def deletePost(args):
+    xr = buildXmlRpc(args)
     postid = int(args['postid'])
 
-    if args['force'] == False:
+    if args['force']:
         yn = raw_input("remove postid: %d? " % postid)
         if not (yn == 'y' or yn == 'yes'):
             return 'cancel'
@@ -136,7 +173,8 @@ def deletePost(xr, args):
     return result
 
 
-def getList(xr, args):
+def getList(args):
+    xr = buildXmlRpc(args)
     num = args['number'] if args['number'] else None
     posts = xr.getRecentPosts(num)
 
@@ -176,17 +214,73 @@ def rename(postid, title, file):
     os.rename(file, dst)
 
 
+def parseConfig(lines):
+    d = {}
+    r = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
+    for l in lines:
+        m = r.match(l)
+        if m:
+            k = m.groupdict().get('key').strip()
+            v = m.groupdict().get('val').strip()
+            d[k] = v
+
+    return d
+
+
+def loadConfig(file):
+    if os.path.exists(file):
+        with codecs.open(file, 'r', 'utf-8') as f:
+            lines = f.readlines()
+        conf_dict = parseConfig(lines)
+
+        return conf_dict
+    return {}
+
+
+def saveConfig(file, args):
+    conf_dict = {}
+    re_dec = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
+
+    if os.path.exists(file):
+        with codecs.open(file, 'r', 'utf-8') as f:
+            lines = f.readlines()
+        conf_dict = parseConfig(lines)
+
+    if args['blogurl']:
+        conf_dict['blogurl'] = args['blogurl']
+    if args['username']:
+        conf_dict['username'] = args['username']
+    if args['password']:
+        conf_dict['password'] = args['password']
+
+    conf_strs = []
+    for k in conf_dict:
+        conf_strs.append("%s = %s\n" % (k, conf_dict[k]))
+
+    with codecs.open(file, 'w', 'utf-8') as f:
+        f.writelines(conf_strs)
+
+    return True
+
+
 if __name__ == '__main__':
     # argument parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--url')
-    parser.add_argument('--username')
-    parser.add_argument('--password')
     subparsers = parser.add_subparsers()
+
+    parser_conf = subparsers.add_parser('config')
+    parser_conf.add_argument('--blogurl')
+    parser_conf.add_argument('--username')
+    parser_conf.add_argument('--password')
+    saveConfigWrapper = lambda a: saveConfig(CONF_FILE, a)
+    parser_conf.set_defaults(func=saveConfigWrapper)
 
     parser_post = subparsers.add_parser('post')
     parser_post.add_argument('file')
     parser_post.add_argument('-r', '--rename', action='store_true')
+    parser_post.add_argument('--blogurl')
+    parser_post.add_argument('--username')
+    parser_post.add_argument('--password')
     parser_post.set_defaults(func=newPost)
 
     parser_edit = subparsers.add_parser('edit')
@@ -194,11 +288,17 @@ if __name__ == '__main__':
     parser_edit.add_argument('file')
     parser_edit.add_argument('-r', '--rename', action='store_true')
     parser_edit.add_argument('-f', '--force', action='store_true')
+    parser_edit.add_argument('--blogurl')
+    parser_edit.add_argument('--username')
+    parser_edit.add_argument('--password')
     parser_edit.set_defaults(func=editPost)
 
     parser_del = subparsers.add_parser('delete')
     parser_del.add_argument('postid')
     parser_del.add_argument('-f', '--force', action='store_true')
+    parser_del.add_argument('--blogurl')
+    parser_del.add_argument('--username')
+    parser_del.add_argument('--password')
     parser_del.set_defaults(func=deletePost)
 
     parser_list = subparsers.add_parser('list')
@@ -206,29 +306,14 @@ if __name__ == '__main__':
     parser_list.add_argument('-d', '--description', action='store_true')
     parser_list.add_argument('-c', '--categories', action='store_true')
     parser_list.add_argument('-k', '--tags', action='store_true')
+    parser_list.add_argument('--blogurl')
+    parser_list.add_argument('--username')
+    parser_list.add_argument('--password')
     parser_list.set_defaults(func=getList)
 
     args = parser.parse_args()
     arg_dict = vars(args)
 
-    # blog info
-    if arg_dict['url']:
-        blogurl = arg_dict['url']
-    else:
-        blogurl = raw_input('blogurl: ')
-    blogurl = '%sxmlrpc.php' % blogurl
-        
-    if arg_dict['username']:
-        username = arg_dict['username']
-    else:
-        username = raw_input('username: ')
-    if arg_dict['password']:
-        password = arg_dict['password']
-    else:
-        password = getpass.getpass('password: ')
-
-    # build
-    xr = XmlRpc(blogurl, username, password)
-    result = args.func(xr, arg_dict)
+    result = args.func(arg_dict)
 
     print(result)
