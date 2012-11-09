@@ -191,7 +191,7 @@ def getList(args):
         if status:
             ss.append("  status: %s" % p['post_status'])
         if description:
-            ss.append("  %s" % p['descriptions'])
+            ss.append("  %s" % p['description'])
         results.append('\n'.join(ss))
 
     return '\n'.join(results)
