@@ -142,7 +142,12 @@ def newPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    return postid
+    if postid == True:
+        message = "Post the article as postid: %d." % postid
+    else:
+        message = "failure"
+
+    return message
 
 
 def editPost(args):
@@ -156,7 +161,12 @@ def editPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    return result
+    if result == True:
+        message = "postid: %d was updated." % postid
+    else:
+        message = "failure"
+
+    return message
 
 
 def deletePost(args):
@@ -169,6 +179,11 @@ def deletePost(args):
             return 'cancel'
 
     result = xr.deletePost(postid)
+
+    if result == True:
+        message = "postid: %d was deleted." % postid
+    else:
+        message = "failure"
 
     return result
 
@@ -194,6 +209,8 @@ def getList(args):
             ss.append("  categories: %s" % ', '.join(p['categories']))
         if t:
             ss.append("  tags: %s" % p['mt_keywords'])
+        if s:
+            ss.append("  status: %s" % p['post_status'])
         if d:
             ss.append("  %s" % p['descriptions'])
         results.append('\n'.join(ss))
@@ -283,11 +300,10 @@ if __name__ == '__main__':
     parser_post.add_argument('--password')
     parser_post.set_defaults(func=newPost)
 
-    parser_edit = subparsers.add_parser('edit')
+    parser_edit = subparsers.add_parser('update')
     parser_edit.add_argument('postid')
     parser_edit.add_argument('file')
     parser_edit.add_argument('-r', '--rename', action='store_true')
-    parser_edit.add_argument('-f', '--force', action='store_true')
     parser_edit.add_argument('--blogurl')
     parser_edit.add_argument('--username')
     parser_edit.add_argument('--password')
@@ -306,6 +322,7 @@ if __name__ == '__main__':
     parser_list.add_argument('-d', '--description', action='store_true')
     parser_list.add_argument('-c', '--categories', action='store_true')
     parser_list.add_argument('-k', '--tags', action='store_true')
+    parser_list.add_argument('-s', '--status', action='store_true')
     parser_list.add_argument('--blogurl')
     parser_list.add_argument('--username')
     parser_list.add_argument('--password')
