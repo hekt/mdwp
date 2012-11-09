@@ -142,12 +142,7 @@ def newPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    if postid == True:
-        message = "the article was posted as postid: %d." % postid
-    else:
-        message = "failure"
-
-    return message
+    return "the article was posted as postid: %d." % postid
 
 
 def editPost(args):
@@ -161,31 +156,15 @@ def editPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    if result == True:
-        message = "postid: %d was updated." % postid
-    else:
-        message = "failure"
-
-    return message
+    return "postid: %d was updated." % postid
 
 
 def deletePost(args):
     xr = buildXmlRpc(args)
     postid = int(args['postid'])
-
-    if args['force']:
-        yn = raw_input("remove postid: %d? " % postid)
-        if not (yn == 'y' or yn == 'yes'):
-            return 'cancel'
-
     result = xr.deletePost(postid)
 
-    if result == True:
-        message = "postid: %d was deleted." % postid
-    else:
-        message = "failure"
-
-    return result
+    return "postid: %d was moved to trash." % postid
 
 
 def getList(args):
@@ -214,9 +193,8 @@ def getList(args):
         if d:
             ss.append("  %s" % p['descriptions'])
         results.append('\n'.join(ss))
-    result = '\n'.join(results)
 
-    return result
+    return '\n'.join(results)
 
 
 def rename(postid, title, file):
@@ -311,7 +289,6 @@ if __name__ == '__main__':
 
     parser_del = subparsers.add_parser('delete')
     parser_del.add_argument('postid')
-    parser_del.add_argument('-f', '--force', action='store_true')
     parser_del.add_argument('--blogurl')
     parser_del.add_argument('--username')
     parser_del.add_argument('--password')
