@@ -1,8 +1,6 @@
 #! /usr/bin/python
 # -*- coding:utf-8 -*-
 
-from __future__ import print_function
-
 import sys
 import os
 import re
@@ -14,7 +12,7 @@ import yaml
 import markdown
 
 
-global CONF_FILE, CONF_FILENAME, CONF_DIRECTORY
+global CONF_FILE
 CONF_FILENAME = '.mdwpconfig'
 CONF_DIRECTORY = os.environ['HOME']
 CONF_FILE = "%s/%s" % (CONF_DIRECTORY, CONF_FILENAME)
@@ -173,24 +171,26 @@ def getList(args):
     posts = xr.getRecentPosts(num)
 
     options = []
-    c, t, d = False, False, False
+    categories, tags, status, description = False, False, False, False
     if args['categories']:
-        c = True
+        categories = True
     if args['tags']:
-        t = True
+        tags = True
+    if args['status']:
+        status = True
     if args['description']:
-        d = True
+        description = True
 
     results = []
     for p in posts:
         ss = ["%s: %s" % (p['postid'], p['title'])]
-        if c:
+        if categories:
             ss.append("  categories: %s" % ', '.join(p['categories']))
-        if t:
+        if tags:
             ss.append("  tags: %s" % p['mt_keywords'])
-        if s:
+        if status:
             ss.append("  status: %s" % p['post_status'])
-        if d:
+        if description:
             ss.append("  %s" % p['descriptions'])
         results.append('\n'.join(ss))
 
