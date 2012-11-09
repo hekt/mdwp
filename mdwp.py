@@ -69,8 +69,9 @@ def buildContent(data):
     content = {}
     content['title'] = y['title']
     content['description'] = text
-    content['categories'] = [y['categories']]
-    content['mt_keywords'] = y['tags']
+    content['categories'] = map(lambda s: s.strip(),
+                                y['categories'].split(','))
+    content['mt_keywords'] = map(lambda s: s.strip(), y['tags'].split(','))
 
     if y['status'] == 'publish':
         content['publish'] = True
@@ -140,7 +141,7 @@ def newPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    return "the article was posted as postid: %d." % postid
+    return "the article was posted as postid: %s." % postid
 
 
 def editPost(args):
