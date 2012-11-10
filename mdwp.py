@@ -141,7 +141,8 @@ def newPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    return "the article was posted as postid: %s." % postid
+    return {'status': True, 'command': 'post',
+            'message': "the article was posted as postid: %s." % postid}
 
 
 def editPost(args):
@@ -155,7 +156,8 @@ def editPost(args):
     if args['rename']:
         rename(postid, content['title'].replace(' ', '-'), args['file'])
 
-    return "postid: %d was updated." % postid
+    return {'status': True, 'command': 'update',
+            'message': "postid: %d was updated." % postid}
 
 
 def deletePost(args):
@@ -163,7 +165,8 @@ def deletePost(args):
     postid = int(args['postid'])
     result = xr.deletePost(postid)
 
-    return "postid: %d was moved to trash." % postid
+    return {'status': True, 'command': 'delete',
+            'message': "postid: %d was moved to trash." % postid}
 
 
 def getList(args):
@@ -195,7 +198,8 @@ def getList(args):
             ss.append("  %s" % p['description'])
         results.append('\n'.join(ss))
 
-    return '\n'.join(results)
+    return {'status': True, 'command': 'list',
+            'message': '\n'.join(results)}
 
 
 def rename(postid, title, file):
@@ -234,6 +238,7 @@ def loadConfig(file):
 
 
 def saveConfig(file, args):
+    options = ('blogurl', 'username', 'password')
     conf_dict = {}
     re_dec = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
 
@@ -242,12 +247,15 @@ def saveConfig(file, args):
             lines = f.readlines()
         conf_dict = parseConfig(lines)
 
-    if args['blogurl']:
-        conf_dict['blogurl'] = args['blogurl']
-    if args['username']:
-        conf_dict['username'] = args['username']
-    if args['password']:
-        conf_dict['password'] = args['password']
+    no_opt = True
+    for i in options:
+        if args[i]:
+            conf_dict[i] = args[i]
+            no_opt = False
+
+    if no_opt:
+        return {'status': False, 'command': 'config',
+                'message': "config takes at least one option."}
 
     conf_strs = []
     for k in conf_dict:
@@ -256,8 +264,8 @@ def saveConfig(file, args):
     with codecs.open(file, 'w', 'utf-8') as f:
         f.writelines(conf_strs)
 
-    return True
-
+    return {'status': True, 'command': 'config',
+            'message': "saved."}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -270,46 +278,41 @@ if __name__ == '__main__':
     help_tags = 'display tags'
     help_status = 'display statuses'
 
-    parser_conf = subparsers.add_parser('config', help='save configs')
-    parser_conf.add_argument('--blogurl', metavar='URL')
-    parser_conf.add_argument('--username')
-    parser_conf.add_argument('--password')
+    # only as `parents`
+    common_bloginfo = argparse.ArgumentParser(add_help=False)
+    common_bloginfo.add_argument('--blogurl', metavar='URL')
+    common_bloginfo.add_argument('--username')
+    common_bloginfo.add_argument('--password')
+    common_rename = argparse.ArgumentParser(add_help=False)
+    common_rename.add_argument('-r', '--rename', action='store_true',
+                               help=help_rename)
+
+    parser_conf = subparsers.add_parser('config', help='save login info',
+                                        parents=[common_bloginfo])
     saveConfigWrapper = lambda a: saveConfig(CONF_FILE, a)
     parser_conf.set_defaults(func=saveConfigWrapper)
 
-    parser_post = subparsers.add_parser('post',
-                                        help='create a post')
+    parser_post = subparsers.add_parser('post', help='new post',
+                                        parents=[common_bloginfo,
+                                                 common_rename])
     parser_post.add_argument('file')
-    parser_post.add_argument('-r', '--rename', action='store_true',
-                             help=help_rename)
-    parser_post.add_argument('--blogurl', metavar='URL')
-    parser_post.add_argument('--username')
-    parser_post.add_argument('--password')
     parser_post.set_defaults(func=newPost)
 
-    parser_edit = subparsers.add_parser('update',
-                                        help='update a post')
+    parser_edit = subparsers.add_parser('update', help='update a post',
+                                        parents=[common_bloginfo,
+                                                 common_rename])
     parser_edit.add_argument('postid')
     parser_edit.add_argument('file')
-    parser_edit.add_argument('-r', '--rename', action='store_true',
-                             help=help_rename)
-    parser_edit.add_argument('--blogurl', metavar='URL')
-    parser_edit.add_argument('--username')
-    parser_edit.add_argument('--password')
     parser_edit.set_defaults(func=editPost)
 
-    parser_del = subparsers.add_parser('delete',
-                                       help='move to trash a post')
+    parser_del = subparsers.add_parser('delete', help='move to trash a post',
+                                       parents=[common_bloginfo])
     parser_del.add_argument('postid')
-    parser_del.add_argument('--blogurl', metavar='URL')
-    parser_del.add_argument('--username')
-    parser_del.add_argument('--password')
     parser_del.set_defaults(func=deletePost)
 
-    parser_list = subparsers.add_parser('list',
-                                        help='display recent posts')
-    parser_list.add_argument('-n', '--number', metavar='N',
-                             help=help_number)
+    parser_list = subparsers.add_parser('list', help='display recent posts',
+                                        parents=[common_bloginfo])
+    parser_list.add_argument('-n', '--number', metavar='N', help=help_number)
     parser_list.add_argument('-d', '--description', action='store_true',
                              help=help_description)
     parser_list.add_argument('-c', '--categories', action='store_true',
@@ -318,9 +321,6 @@ if __name__ == '__main__':
                              help=help_tags)
     parser_list.add_argument('-s', '--status', action='store_true',
                              help=help_status)
-    parser_list.add_argument('--blogurl', metavar='URL')
-    parser_list.add_argument('--username')
-    parser_list.add_argument('--password')
     parser_list.set_defaults(func=getList)
 
     args = parser.parse_args()
@@ -328,4 +328,18 @@ if __name__ == '__main__':
 
     result = args.func(arg_dict)
 
-    print(result)
+    if result['command'] == 'post':
+        used_parser = parser_post
+    elif result['command'] == 'update':
+        used_parser = parser_edit
+    elif result['command'] == 'delete':
+        used_parser = parser_del
+    elif result['command'] == 'list':
+        used_parser = parser_list
+    elif result['command'] == 'config':
+        used_parser = parser_conf
+    
+    if result['status']:
+        print(result['message'])
+    else:
+        used_parser.error(result['message'])
