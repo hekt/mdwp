@@ -260,48 +260,65 @@ def saveConfig(file, args):
 
 
 if __name__ == '__main__':
-    # argument parser
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
 
-    parser_conf = subparsers.add_parser('config')
-    parser_conf.add_argument('--blogurl')
+    help_rename = 'rename the file as "POSTID_TITLE.ext" when task succeed'
+    help_number = 'the number of articles to display'
+    help_description = 'display discriptions'
+    help_categories = 'dispaly categories'
+    help_tags = 'display tags'
+    help_status = 'display statuses'
+
+    parser_conf = subparsers.add_parser('config', help='save configs')
+    parser_conf.add_argument('--blogurl', metavar='URL')
     parser_conf.add_argument('--username')
     parser_conf.add_argument('--password')
     saveConfigWrapper = lambda a: saveConfig(CONF_FILE, a)
     parser_conf.set_defaults(func=saveConfigWrapper)
 
-    parser_post = subparsers.add_parser('post')
+    parser_post = subparsers.add_parser('post',
+                                        help='create a post')
     parser_post.add_argument('file')
-    parser_post.add_argument('-r', '--rename', action='store_true')
-    parser_post.add_argument('--blogurl')
+    parser_post.add_argument('-r', '--rename', action='store_true',
+                             help=help_rename)
+    parser_post.add_argument('--blogurl', metavar='URL')
     parser_post.add_argument('--username')
     parser_post.add_argument('--password')
     parser_post.set_defaults(func=newPost)
 
-    parser_edit = subparsers.add_parser('update')
+    parser_edit = subparsers.add_parser('update',
+                                        help='update a post')
     parser_edit.add_argument('postid')
     parser_edit.add_argument('file')
-    parser_edit.add_argument('-r', '--rename', action='store_true')
-    parser_edit.add_argument('--blogurl')
+    parser_edit.add_argument('-r', '--rename', action='store_true',
+                             help=help_rename)
+    parser_edit.add_argument('--blogurl', metavar='URL')
     parser_edit.add_argument('--username')
     parser_edit.add_argument('--password')
     parser_edit.set_defaults(func=editPost)
 
-    parser_del = subparsers.add_parser('delete')
+    parser_del = subparsers.add_parser('delete',
+                                       help='move to trash a post')
     parser_del.add_argument('postid')
-    parser_del.add_argument('--blogurl')
+    parser_del.add_argument('--blogurl', metavar='URL')
     parser_del.add_argument('--username')
     parser_del.add_argument('--password')
     parser_del.set_defaults(func=deletePost)
 
-    parser_list = subparsers.add_parser('list')
-    parser_list.add_argument('-n', '--number')
-    parser_list.add_argument('-d', '--description', action='store_true')
-    parser_list.add_argument('-c', '--categories', action='store_true')
-    parser_list.add_argument('-k', '--tags', action='store_true')
-    parser_list.add_argument('-s', '--status', action='store_true')
-    parser_list.add_argument('--blogurl')
+    parser_list = subparsers.add_parser('list',
+                                        help='display recent posts')
+    parser_list.add_argument('-n', '--number', metavar='N',
+                             help=help_number)
+    parser_list.add_argument('-d', '--description', action='store_true',
+                             help=help_description)
+    parser_list.add_argument('-c', '--categories', action='store_true',
+                             help=help_categories)
+    parser_list.add_argument('-k', '--tags', action='store_true',
+                             help=help_tags)
+    parser_list.add_argument('-s', '--status', action='store_true',
+                             help=help_status)
+    parser_list.add_argument('--blogurl', metavar='URL')
     parser_list.add_argument('--username')
     parser_list.add_argument('--password')
     parser_list.set_defaults(func=getList)
