@@ -21,7 +21,7 @@ markdown text
 
 # Usage
 
-```
+```shell
 $ python mdwp.py --help
 $ python mdwp.py post --help
 $ python mdwp.py update --help
