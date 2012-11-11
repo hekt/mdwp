@@ -55,290 +55,301 @@ class XmlRpc(object):
                                                  publish)
 
 
-def buildContent(data):
-    r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
-                   re.M | re.S)
-    match_obj = r.match(data)
-    y = yaml.load(match_obj.groupdict().get('yaml'))
+class Parser(object):
+    def __init__(self):
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers()
 
-    text = match_obj.groupdict().get('content')
-    text = gfmToFenced(text)
-    text = markdown.markdown(text, extensions=['footnotes', 'codehilite',
-                                               'fenced_code'])
+        help_rename = 'rename the file as "POSTID_TITLE.ext" when task succeed'
+        help_number = 'the number of articles to display'
+        help_description = 'display discriptions'
+        help_categories = 'dispaly categories'
+        help_tags = 'display tags'
+        help_status = 'display statuses'
 
-    content = {}
-    content['title'] = y['title']
-    content['description'] = text
-    content['categories'] = map(lambda s: s.strip(),
-                                y['categories'].split(','))
-    content['mt_keywords'] = map(lambda s: s.strip(), y['tags'].split(','))
+        # only as `parents`
+        common_bloginfo = argparse.ArgumentParser(add_help=False)
+        common_bloginfo.add_argument('--blogurl', metavar='URL')
+        common_bloginfo.add_argument('--username')
+        common_bloginfo.add_argument('--password')
+        common_rename = argparse.ArgumentParser(add_help=False)
+        common_rename.add_argument('-r', '--rename', action='store_true',
+                                   help=help_rename)
 
-    if y['status'] == 'publish':
-        content['publish'] = True
-    else:
-        content['publish'] = False
+        parser_conf = subparsers.add_parser('config', help='save login info',
+                                            parents=[common_bloginfo])
+        parser_conf.set_defaults(func=self.saveConfig)
 
-    return content
+        parser_post = subparsers.add_parser('post', help='new post',
+                                            parents=[common_bloginfo,
+                                                     common_rename])
+        parser_post.add_argument('file')
+        parser_post.set_defaults(func=self.newPost)
+
+        parser_edit = subparsers.add_parser('update', help='update a post',
+                                            parents=[common_bloginfo,
+                                                     common_rename])
+        parser_edit.add_argument('postid')
+        parser_edit.add_argument('file')
+        parser_edit.set_defaults(func=self.editPost)
+
+        parser_del = subparsers.add_parser('delete',
+                                           help='move to trash a post',
+                                           parents=[common_bloginfo])
+        parser_del.add_argument('postid')
+        parser_del.set_defaults(func=self.deletePost)
+
+        parser_list = subparsers.add_parser('list',
+                                            help='display recent posts',
+                                            parents=[common_bloginfo])
+        parser_list.add_argument('-n', '--number', metavar='N',
+                                 help=help_number)
+        parser_list.add_argument('-d', '--description', action='store_true',
+                                 help=help_description)
+        parser_list.add_argument('-c', '--categories', action='store_true',
+                                 help=help_categories)
+        parser_list.add_argument('-k', '--tags', action='store_true',
+                                 help=help_tags)
+        parser_list.add_argument('-s', '--status', action='store_true',
+                                 help=help_status)
+        parser_list.set_defaults(func=self.getList)
+
+        self.parser = parser
+        self.parser_post = parser_post
+        self.parser_edit = parser_edit
+        self.parser_del = parser_del
+        self.parser_list = parser_list
+        self.parser_conf = parser_conf
+
+    def newPost(self, args):
+        xr = Common().buildXmlRpc(args)
+        data = codecs.open(args['file'], 'r', 'utf-8').read()
+        content = Common().buildContent(data)
+        publish = content.pop('publish')
+        postid = xr.newPost(content, publish)
+
+        if args['rename']:
+            basename = "%s_%s" % (postid, content['title'])
+            SysManage().renameFile(args['file'], basename)
+
+        return {'status': True, 'command': 'post',
+                'message': "the article was posted as postid: %s." % postid}
+
+    def editPost(self, args):
+        xr = Common().buildXmlRpc(args)
+        postid = int(args['postid'])
+        data = codecs.open(args['file'], 'r', 'utf-8').read()
+        content = Common().buildContent(data)
+        publish = content.pop('publish')
+        result = xr.editPost(postid, content, publish)
+
+        if args['rename']:
+            basename = "%s_%s" % (postid, content['title'])
+            SysManage().renameFile(args['file'], basename)
+
+        return {'status': True, 'command': 'update',
+                'message': "postid: %d was updated." % postid}
+
+    def deletePost(self, args):
+        xr = Common().buildXmlRpc(args)
+        postid = int(args['postid'])
+        result = xr.deletePost(postid)
+
+        return {'status': True, 'command': 'delete',
+                'message': "postid: %d was moved to trash." % postid}
+
+    def getList(self, args):
+        xr = Common().buildXmlRpc(args)
+        num = args['number'] if args['number'] else None
+        posts = xr.getRecentPosts(num)
+
+        options = []
+        categories, tags, status, description = False, False, False, False
+        if args['categories']:
+            categories = True
+        if args['tags']:
+            tags = True
+        if args['status']:
+            status = True
+        if args['description']:
+            description = True
+
+        results = []
+        for p in posts:
+            ss = ["%s: %s" % (p['postid'], p['title'])]
+            if categories:
+                ss.append("  categories: %s" % ', '.join(p['categories']))
+            if tags:
+                ss.append("  tags: %s" % p['mt_keywords'])
+            if status:
+                ss.append("  status: %s" % p['post_status'])
+            if description:
+                ss.append("  %s" % p['description'])
+            results.append('\n'.join(ss))
+
+        return {'status': True, 'command': 'list',
+                'message': '\n'.join(results)}
+
+    def saveConfig(self, args):
+        options = ('blogurl', 'username', 'password')
+        conf_dict = {}
+
+        no_opt = True
+        for i in options:
+            if args[i]:
+                conf_dict[i] = args[i]
+                no_opt = False
+
+        if no_opt:
+            return {'status': False, 'command': 'config',
+                    'message': "config takes at least one option."}
+
+        SysManage().saveConfigFile(CONF_FILE, conf_dict)
+
+        return {'status': True, 'command': 'config',
+                'message': "saved."}
 
 
-def buildXmlRpc(args):
-    loaded_conf = loadConfig(CONF_FILE)
+class Common(object):
+    def buildContent(self, data):
+        r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
+                       re.M | re.S)
+        match_obj = r.match(data)
+        y = yaml.load(match_obj.groupdict().get('yaml'))
 
-    if arg_dict['blogurl']:
-        blogurl = args['blogurl']
-    elif 'blogurl' in loaded_conf.keys():
-        blogurl = loaded_conf['blogurl']
-    else:
-        blogurl = raw_input('blogurl: ')
-    blogurl = '%sxmlrpc.php' % blogurl
+        text = match_obj.groupdict().get('content')
+        text = self.gfmToFenced(text)
+        text = markdown.markdown(text, extensions=['footnotes', 'codehilite',
+                                                   'fenced_code'])
 
-    if arg_dict['username']:
-        username = args['username']
-    elif 'username' in loaded_conf.keys():
-        username = loaded_conf['username']
-    else:
-        username = raw_input('username: ')
+        content = {}
+        content['title'] = y['title']
+        content['description'] = text
+        content['categories'] = map(lambda s: s.strip(),
+                                    y['categories'].split(','))
+        content['mt_keywords'] = map(lambda s: s.strip(),
+                                     y['tags'].split(','))
 
-    if arg_dict['password']:
-        password = args['password']
-    elif 'password' in loaded_conf.keys():
-        password = loaded_conf['password']
-    else:
-        password = getpass.getpass('password: ')
-
-    return XmlRpc(blogurl, username, password)
-
-
-def gfmToFenced(text):
-    re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
-                        re.M | re.S)
-
-    def repFunc(match_obj):
-        lang = match_obj.groupdict().get('lang')
-        body = match_obj.groupdict().get('body')
-
-        if lang:
-            return ("~~~~.%s\n"
-                    "%s"
-                    "~~~~") % (lang, body)
+        if y['status'] == 'publish':
+            content['publish'] = True
         else:
-            return ("~~~~\n"
-                    "%s"
-                    "~~~~") % body
+            content['publish'] = False
 
-    text = re_gfm.sub(repFunc, text)
+        return content
 
-    return text
+    def buildXmlRpc(self, args):
+        loaded_conf = self.loadConfig(CONF_FILE)
 
+        if arg_dict['blogurl']:
+            blogurl = args['blogurl']
+        elif 'blogurl' in loaded_conf.keys():
+            blogurl = loaded_conf['blogurl']
+        else:
+            blogurl = raw_input('blogurl: ')
+        blogurl = '%sxmlrpc.php' % blogurl
 
-def newPost(args):
-    xr = buildXmlRpc(args)
-    data = codecs.open(args['file'], 'r', 'utf-8').read()
-    content = buildContent(data)
-    publish = content.pop('publish')
-    postid = xr.newPost(content, publish)
+        if arg_dict['username']:
+            username = args['username']
+        elif 'username' in loaded_conf.keys():
+            username = loaded_conf['username']
+        else:
+            username = raw_input('username: ')
 
-    if args['rename']:
-        rename(postid, content['title'].replace(' ', '-'), args['file'])
+        if arg_dict['password']:
+            password = args['password']
+        elif 'password' in loaded_conf.keys():
+            password = loaded_conf['password']
+        else:
+            password = getpass.getpass('password: ')
 
-    return {'status': True, 'command': 'post',
-            'message': "the article was posted as postid: %s." % postid}
+        return XmlRpc(blogurl, username, password)
 
+    def gfmToFenced(self, text):
+        re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
+                            re.M | re.S)
 
-def editPost(args):
-    xr = buildXmlRpc(args)
-    postid = int(args['postid'])
-    data = codecs.open(args['file'], 'r', 'utf-8').read()
-    content = buildContent(data)
-    publish = content.pop('publish')
-    result = xr.editPost(postid, content, publish)
+        def repFunc(match_obj):
+            lang = match_obj.groupdict().get('lang')
+            body = match_obj.groupdict().get('body')
 
-    if args['rename']:
-        rename(postid, content['title'].replace(' ', '-'), args['file'])
+            if lang:
+                return ("~~~~.%s\n"
+                        "%s"
+                        "~~~~") % (lang, body)
+            else:
+                return ("~~~~\n"
+                        "%s"
+                        "~~~~") % body
 
-    return {'status': True, 'command': 'update',
-            'message': "postid: %d was updated." % postid}
+        return re_gfm.sub(repFunc, text)
 
+    def loadConfig(self, file):
+        if os.path.exists(file):
+            with codecs.open(file, 'r', 'utf-8') as f:
+                lines = f.readlines()
+            conf_dict = self.parseConfig(lines)
+            return conf_dict
+        return {}
 
-def deletePost(args):
-    xr = buildXmlRpc(args)
-    postid = int(args['postid'])
-    result = xr.deletePost(postid)
-
-    return {'status': True, 'command': 'delete',
-            'message': "postid: %d was moved to trash." % postid}
-
-
-def getList(args):
-    xr = buildXmlRpc(args)
-    num = args['number'] if args['number'] else None
-    posts = xr.getRecentPosts(num)
-
-    options = []
-    categories, tags, status, description = False, False, False, False
-    if args['categories']:
-        categories = True
-    if args['tags']:
-        tags = True
-    if args['status']:
-        status = True
-    if args['description']:
-        description = True
-
-    results = []
-    for p in posts:
-        ss = ["%s: %s" % (p['postid'], p['title'])]
-        if categories:
-            ss.append("  categories: %s" % ', '.join(p['categories']))
-        if tags:
-            ss.append("  tags: %s" % p['mt_keywords'])
-        if status:
-            ss.append("  status: %s" % p['post_status'])
-        if description:
-            ss.append("  %s" % p['description'])
-        results.append('\n'.join(ss))
-
-    return {'status': True, 'command': 'list',
-            'message': '\n'.join(results)}
+    def parseConfig(self, lines):
+        d = {}
+        r = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
+        for l in lines:
+            m = r.match(l)
+            if m:
+                k = m.groupdict().get('key').strip()
+                v = m.groupdict().get('val').strip()
+                d[k] = v
+        return d
 
 
-def rename(postid, title, file):
-    filename = "%s_%s" % (postid, title)
-    ext = os.path.splitext(file)[1]
-    path = os.path.dirname(file)
-    if path:
-        dst = "%s/%s%s" % (path, filename, ext)
-    else:
-        dst = filename
+class SysManage(object):
+    def saveConfigFile(self, file, conf_dict):
+        re_dec = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)',
+                            re.I)
 
-    os.rename(file, dst)
+        if os.path.exists(file):
+            with codecs.open(file, 'r', 'utf-8') as f:
+                lines = f.readlines()
+            current_conf = Common.parseConfig(lines)
 
+        for k in conf_dict:
+            current_conf[k] = conf_dict[k]
 
-def parseConfig(lines):
-    d = {}
-    r = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
-    for l in lines:
-        m = r.match(l)
-        if m:
-            k = m.groupdict().get('key').strip()
-            v = m.groupdict().get('val').strip()
-            d[k] = v
+        conf_strs = []
+        for k in current_conf:
+            conf_strs.append("%s = %s\n" % (k, current_conf[k]))
 
-    return d
+        with codecs.open(file, 'w', 'utf-8') as f:
+            f.writelines(conf_strs)
 
+    def renameFile(self, file, basename):
+        ext = os.path.splitext(file)[1]
+        path = os.path.dirname(file)
+        if path:
+            dst = "%s/%s%s" % (path, basename, ext)
+        else:
+            dst = "%s%s" % (basename, ext)
+        os.rename(file, dst)
 
-def loadConfig(file):
-    if os.path.exists(file):
-        with codecs.open(file, 'r', 'utf-8') as f:
-            lines = f.readlines()
-        conf_dict = parseConfig(lines)
-
-        return conf_dict
-    return {}
-
-
-def saveConfig(file, args):
-    options = ('blogurl', 'username', 'password')
-    conf_dict = {}
-    re_dec = re.compile(r'(?P<key>[a-z-]+)[\s\t]*=[\s\t]*(?P<val>.+)', re.I)
-
-    if os.path.exists(file):
-        with codecs.open(file, 'r', 'utf-8') as f:
-            lines = f.readlines()
-        conf_dict = parseConfig(lines)
-
-    no_opt = True
-    for i in options:
-        if args[i]:
-            conf_dict[i] = args[i]
-            no_opt = False
-
-    if no_opt:
-        return {'status': False, 'command': 'config',
-                'message': "config takes at least one option."}
-
-    conf_strs = []
-    for k in conf_dict:
-        conf_strs.append("%s = %s\n" % (k, conf_dict[k]))
-
-    with codecs.open(file, 'w', 'utf-8') as f:
-        f.writelines(conf_strs)
-
-    return {'status': True, 'command': 'config',
-            'message': "saved."}
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
-
-    help_rename = 'rename the file as "POSTID_TITLE.ext" when task succeed'
-    help_number = 'the number of articles to display'
-    help_description = 'display discriptions'
-    help_categories = 'dispaly categories'
-    help_tags = 'display tags'
-    help_status = 'display statuses'
-
-    # only as `parents`
-    common_bloginfo = argparse.ArgumentParser(add_help=False)
-    common_bloginfo.add_argument('--blogurl', metavar='URL')
-    common_bloginfo.add_argument('--username')
-    common_bloginfo.add_argument('--password')
-    common_rename = argparse.ArgumentParser(add_help=False)
-    common_rename.add_argument('-r', '--rename', action='store_true',
-                               help=help_rename)
-
-    parser_conf = subparsers.add_parser('config', help='save login info',
-                                        parents=[common_bloginfo])
-    saveConfigWrapper = lambda a: saveConfig(CONF_FILE, a)
-    parser_conf.set_defaults(func=saveConfigWrapper)
-
-    parser_post = subparsers.add_parser('post', help='new post',
-                                        parents=[common_bloginfo,
-                                                 common_rename])
-    parser_post.add_argument('file')
-    parser_post.set_defaults(func=newPost)
-
-    parser_edit = subparsers.add_parser('update', help='update a post',
-                                        parents=[common_bloginfo,
-                                                 common_rename])
-    parser_edit.add_argument('postid')
-    parser_edit.add_argument('file')
-    parser_edit.set_defaults(func=editPost)
-
-    parser_del = subparsers.add_parser('delete', help='move to trash a post',
-                                       parents=[common_bloginfo])
-    parser_del.add_argument('postid')
-    parser_del.set_defaults(func=deletePost)
-
-    parser_list = subparsers.add_parser('list', help='display recent posts',
-                                        parents=[common_bloginfo])
-    parser_list.add_argument('-n', '--number', metavar='N', help=help_number)
-    parser_list.add_argument('-d', '--description', action='store_true',
-                             help=help_description)
-    parser_list.add_argument('-c', '--categories', action='store_true',
-                             help=help_categories)
-    parser_list.add_argument('-k', '--tags', action='store_true',
-                             help=help_tags)
-    parser_list.add_argument('-s', '--status', action='store_true',
-                             help=help_status)
-    parser_list.set_defaults(func=getList)
-
-    args = parser.parse_args()
+    p = Parser()
+    args = p.parser.parse_args()
     arg_dict = vars(args)
-
     result = args.func(arg_dict)
 
     if result['command'] == 'post':
-        used_parser = parser_post
+        used_parser = p.parser_post
     elif result['command'] == 'update':
-        used_parser = parser_edit
+        used_parser = p.parser_edit
     elif result['command'] == 'delete':
-        used_parser = parser_del
+        used_parser = p.parser_del
     elif result['command'] == 'list':
-        used_parser = parser_list
+        used_parser = p.parser_list
     elif result['command'] == 'config':
-        used_parser = parser_conf
-    
+        used_parser = p.parser_conf
+
     if result['status']:
         print(result['message'])
     else:
