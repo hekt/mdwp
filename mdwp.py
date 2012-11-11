@@ -121,6 +121,10 @@ class Parser(object):
         self.parser_list = parser_list
         self.parser_conf = parser_conf
 
+        self.status = True
+        self.message = ''
+        self.mode = ''
+
     def newPost(self, args):
         xr = Common().buildXmlRpc(args)
         data = codecs.open(args['file'], 'r', 'utf-8').read()
@@ -132,8 +136,7 @@ class Parser(object):
             basename = "%s_%s" % (postid, content['title'])
             SysManage().renameFile(args['file'], basename)
 
-        return {'status': True, 'command': 'post',
-                'message': "the article was posted as postid: %s." % postid}
+        return "the article was posted as postid: %s." % postid
 
     def editPost(self, args):
         xr = Common().buildXmlRpc(args)
@@ -147,16 +150,14 @@ class Parser(object):
             basename = "%s_%s" % (postid, content['title'])
             SysManage().renameFile(args['file'], basename)
 
-        return {'status': True, 'command': 'update',
-                'message': "postid: %d was updated." % postid}
+        return "postid: %d was updated." % postid
 
     def deletePost(self, args):
         xr = Common().buildXmlRpc(args)
         postid = int(args['postid'])
         result = xr.deletePost(postid)
 
-        return {'status': True, 'command': 'delete',
-                'message': "postid: %d was moved to trash." % postid}
+        return "postid: %d was moved to trash." % postid
 
     def getList(self, args):
         xr = Common().buildXmlRpc(args)
@@ -187,8 +188,7 @@ class Parser(object):
                 ss.append("  %s" % p['description'])
             results.append('\n'.join(ss))
 
-        return {'status': True, 'command': 'list',
-                'message': '\n'.join(results)}
+        return '\n'.join(results)
 
     def saveConfig(self, args):
         options = ('blogurl', 'username', 'password')
@@ -201,13 +201,11 @@ class Parser(object):
                 no_opt = False
 
         if no_opt:
-            return {'status': False, 'command': 'config',
-                    'message': "config takes at least one option."}
+            self.parser_conf.error("config takes at least one option.")
 
         SysManage().saveConfigFile(CONF_FILE, conf_dict)
 
-        return {'status': True, 'command': 'config',
-                'message': "saved."}
+        return "saved."
 
 
 class Common(object):
@@ -339,18 +337,4 @@ if __name__ == '__main__':
     arg_dict = vars(args)
     result = args.func(arg_dict)
 
-    if result['command'] == 'post':
-        used_parser = p.parser_post
-    elif result['command'] == 'update':
-        used_parser = p.parser_edit
-    elif result['command'] == 'delete':
-        used_parser = p.parser_del
-    elif result['command'] == 'list':
-        used_parser = p.parser_list
-    elif result['command'] == 'config':
-        used_parser = p.parser_conf
-
-    if result['status']:
-        print(result['message'])
-    else:
-        used_parser.error(result['message'])
+    print(result['message'])
