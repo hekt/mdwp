@@ -55,26 +55,35 @@ class XmlRpc(object):
                                                  publish)
 
 
-class Parser(object):
+class Application(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers()
 
         help_rename = 'rename the file as "POSTID_TITLE.ext" when task succeed'
         help_number = 'the number of articles to display'
-        help_description = 'display discriptions'
-        help_categories = 'dispaly categories'
-        help_tags = 'display tags'
-        help_status = 'display statuses'
+        help_list_description = 'display discriptions'
+        help_list_categories = 'dispaly categories'
+        help_list_tags = 'display tags'
+        help_list_status = 'display statuses'
+        help_title = 'specify the title'
+        help_tags = 'specify tags'
+        help_categories = 'specify categories'
+        help_status = 'specify the status'
 
         # only as `parents`
         common_bloginfo = argparse.ArgumentParser(add_help=False)
         common_bloginfo.add_argument('--blogurl', metavar='URL')
         common_bloginfo.add_argument('--username')
         common_bloginfo.add_argument('--password')
-        common_rename = argparse.ArgumentParser(add_help=False)
-        common_rename.add_argument('-r', '--rename', action='store_true',
-                                   help=help_rename)
+        common_with_file = argparse.ArgumentParser(add_help=False)
+        common_with_file.add_argument('-r', '--rename', action='store_true',
+                                      help=help_rename)
+        common_with_file.add_argument('--title', help=help_title)
+        common_with_file.add_argument('--tags', nargs='+', help=help_tags)
+        common_with_file.add_argument('--categories', nargs='+',
+                                      help=help_categories)
+        common_with_file.add_argument('--status', help=help_status)
 
         parser_conf = subparsers.add_parser('config', help='save login info',
                                             parents=[common_bloginfo])
@@ -82,13 +91,13 @@ class Parser(object):
 
         parser_post = subparsers.add_parser('post', help='new post',
                                             parents=[common_bloginfo,
-                                                     common_rename])
+                                                     common_with_file])
         parser_post.add_argument('file')
         parser_post.set_defaults(func=self.newPost)
 
         parser_edit = subparsers.add_parser('update', help='update a post',
                                             parents=[common_bloginfo,
-                                                     common_rename])
+                                                     common_with_file])
         parser_edit.add_argument('postid')
         parser_edit.add_argument('file')
         parser_edit.set_defaults(func=self.editPost)
@@ -105,13 +114,13 @@ class Parser(object):
         parser_list.add_argument('-n', '--number', metavar='N',
                                  help=help_number)
         parser_list.add_argument('-d', '--description', action='store_true',
-                                 help=help_description)
+                                 help=help_list_description)
         parser_list.add_argument('-c', '--categories', action='store_true',
-                                 help=help_categories)
+                                 help=help_list_categories)
         parser_list.add_argument('-k', '--tags', action='store_true',
-                                 help=help_tags)
+                                 help=help_list_tags)
         parser_list.add_argument('-s', '--status', action='store_true',
-                                 help=help_status)
+                                 help=help_list_status)
         parser_list.set_defaults(func=self.getList)
 
         self.parser = parser
@@ -129,7 +138,9 @@ class Parser(object):
         xr = Common().buildXmlRpc(args)
         data = codecs.open(args['file'], 'r', 'utf-8').read()
         content = Common().buildContent(data)
+        content = Common().overwriteContentByArgs(content, args)
         publish = content.pop('publish')
+
         postid = xr.newPost(content, publish)
 
         if args['rename']:
@@ -143,7 +154,14 @@ class Parser(object):
         postid = int(args['postid'])
         data = codecs.open(args['file'], 'r', 'utf-8').read()
         content = Common().buildContent(data)
+        content = Common().overwriteContentByArgs(content, args)
         publish = content.pop('publish')
+
+        values = ('title', 'tags', 'categories', 'status')
+        for v in values:
+            if args.get(v):
+                content[v] = args[v]
+
         result = xr.editPost(postid, content, publish)
 
         if args['rename']:
@@ -209,6 +227,20 @@ class Parser(object):
 
 
 class Common(object):
+    def overwriteContentByArgs(self, content, args):
+        values = ('title', 'categories')
+
+        for v in values:
+            if args.get(v):
+                content[v] = args[v]
+        if args.get('tags'):
+            content['mt_keywords'] = args['tags']
+        if args.get('status'):
+            content['publish'] = True if args.get('status') == 'publish' \
+                                 else False
+
+        return content
+        
     def buildContent(self, data):
         r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
                        re.M | re.S)
@@ -332,9 +364,9 @@ class SysManage(object):
 
 
 if __name__ == '__main__':
-    p = Parser()
-    args = p.parser.parse_args()
+    app = Application()
+    args = app.parser.parse_args()
     arg_dict = vars(args)
     result = args.func(arg_dict)
 
-    print(result['message'])
+    print(result)
