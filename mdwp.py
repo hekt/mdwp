@@ -130,10 +130,6 @@ class Application(object):
         self.parser_list = parser_list
         self.parser_conf = parser_conf
 
-        self.status = True
-        self.message = ''
-        self.mode = ''
-
     def newPost(self, args):
         xr = Common().buildXmlRpc(args)
         data = codecs.open(args['file'], 'r', 'utf-8').read()
