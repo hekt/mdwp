@@ -66,10 +66,10 @@ class Application(object):
         help_list_categories = 'dispaly categories'
         help_list_tags = 'display tags'
         help_list_status = 'display statuses'
-        help_title = 'specify the title'
-        help_tags = 'specify tags'
-        help_categories = 'specify categories'
-        help_status = 'specify the status'
+        help_title = 'overwrite the title'
+        help_tags = 'overwrite tags'
+        help_categories = 'overwrite categories'
+        help_status = 'overwrite the status'
 
         # only as `parents`
         common_bloginfo = argparse.ArgumentParser(add_help=False)
@@ -157,9 +157,9 @@ class Application(object):
         content = Common().overwriteContentByArgs(content, args)
         publish = content.pop('publish')
 
-        values = ('title', 'tags', 'categories', 'status')
+        values = ('title', 'tags', 'categories', 'status', )
         for v in values:
-            if args.get(v):
+            if v in args:
                 content[v] = args[v]
 
         result = xr.editPost(postid, content, publish)
@@ -209,7 +209,7 @@ class Application(object):
         return '\n'.join(results)
 
     def saveConfig(self, args):
-        options = ('blogurl', 'username', 'password')
+        options = ('blogurl', 'username', 'password', )
         conf_dict = {}
 
         no_opt = True
@@ -228,19 +228,18 @@ class Application(object):
 
 class Common(object):
     def overwriteContentByArgs(self, content, args):
-        values = ('title', 'categories')
-
+        values = ('title', 'categories', )
         for v in values:
             if args.get(v):
                 content[v] = args[v]
+
         if args.get('tags'):
             content['mt_keywords'] = args['tags']
         if args.get('status'):
-            content['publish'] = True if args.get('status') == 'publish' \
-                                 else False
+            content['publish'] = True if args['status'] == 'publish' else False
 
         return content
-        
+
     def buildContent(self, data):
         r = re.compile(r'(^---\s*$(?P<yaml>.*?)^---\s*$)?(?P<content>.*)',
                        re.M | re.S)
@@ -268,31 +267,23 @@ class Common(object):
         return content
 
     def buildXmlRpc(self, args):
-        loaded_conf = self.loadConfig(CONF_FILE)
+        confs = self.loadConfig(CONF_FILE)
+        values = ('blogurl', 'username', )
+        secret_values = ('password', )
 
-        if arg_dict['blogurl']:
-            blogurl = args['blogurl']
-        elif 'blogurl' in loaded_conf.keys():
-            blogurl = loaded_conf['blogurl']
-        else:
-            blogurl = raw_input('blogurl: ')
-        blogurl = '%sxmlrpc.php' % blogurl
+        for v in values:
+            if arg_dict[v]:
+                confs[v] = args[v]
+            elif not v in confs:
+                confs[v] = raw_input("%s: " % v)
+        for sv in secret_values:
+            if arg_dict[sv]:
+                confs[sv] = args[sv]
+            elif not sv in confs:
+                confs[sv] = getpass.getpass("%s: " % sv)
+        confs['blogurl'] = '%srmlrpc.php' % confs['blogurl']
 
-        if arg_dict['username']:
-            username = args['username']
-        elif 'username' in loaded_conf.keys():
-            username = loaded_conf['username']
-        else:
-            username = raw_input('username: ')
-
-        if arg_dict['password']:
-            password = args['password']
-        elif 'password' in loaded_conf.keys():
-            password = loaded_conf['password']
-        else:
-            password = getpass.getpass('password: ')
-
-        return XmlRpc(blogurl, username, password)
+        return XmlRpc(**confs)
 
     def gfmToFenced(self, text):
         re_gfm = re.compile(r'^```(?P<lang>[^\n]*?)\n^(?P<body>.*?)^```',
