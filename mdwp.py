@@ -277,7 +277,7 @@ class Common(object):
                 confs[sv] = args[sv]
             elif not sv in confs:
                 confs[sv] = getpass.getpass("%s: " % sv)
-        confs['blogurl'] = '%srmlrpc.php' % confs['blogurl']
+        confs['blogurl'] = '%sxmlrpc.php' % confs['blogurl']
 
         return XmlRpc(**confs)
 
