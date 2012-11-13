@@ -153,11 +153,6 @@ class Application(object):
         content = Common().overwriteContentByArgs(content, args)
         publish = content.pop('publish')
 
-        values = ('title', 'tags', 'categories', 'status', )
-        for v in values:
-            if v in args:
-                content[v] = args[v]
-
         result = xr.editPost(postid, content, publish)
 
         if args['rename']:
@@ -227,7 +222,7 @@ class Common(object):
         values = ('title', 'categories', )
         for v in values:
             if args.get(v):
-                content[v] = args[v]
+                content[v] = args.get(v)
 
         if args.get('tags'):
             content['mt_keywords'] = args['tags']
